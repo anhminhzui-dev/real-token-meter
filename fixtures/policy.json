@@ -1,0 +1,16 @@
+{
+  "synthetic": true,
+  "policy_id": "throughput-v1",
+  "max_step_padding_ratio": 0.35,
+  "max_run_padding_ratio": 0.20,
+  "min_steps": 4,
+  "required_fields": [
+    "run_id",
+    "step",
+    "batch_size",
+    "seq_len",
+    "pad_tokens",
+    "wall_seconds",
+    "gpu_hour_rate_synthetic"
+  ]
+}

@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install pytest
+        run: python -m pip install pytest
+      - name: Run tests (bare checkout, no package install)
+        run: python -m pytest -q
+
+  must-refuse:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Clean fixture must pass (VERDICT GO, exit 0)
+        run: |
+          set -e
+          out=$(python -m real_token_meter.cli meter --policy fixtures/policy.json --log fixtures/log_clean.jsonl)
+          echo "$out"
+          echo "$out" | grep -qx "VERDICT: GO"
+      - name: Seeded-bad fixture must refuse (HOLD, exit 2, codes named in summary.json)
+        run: |
+          set +e
+          python -m real_token_meter.cli meter \
+            --policy fixtures/policy.json \
+            --log fixtures/log_bad.jsonl \
+            --out runs/bad
+          code=$?
+          set -e
+          if [ "$code" -ne 2 ]; then
+            echo "expected exit 2 from the seeded-bad fixture, got $code" >&2
+            exit 1
+          fi
+          grep -q "PADDING_INFLATED" runs/bad/summary.json
+          grep -q "MALFORMED_ROW" runs/bad/summary.json
+      - name: The padding-inflated run must not win the comparison
+        run: |
+          set +e
+          out=$(python -m real_token_meter.cli compare --policy fixtures/policy.json --a fixtures/log_clean.jsonl --b fixtures/log_padded.jsonl)
+          code=$?
+          set -e
+          echo "$out"
+          [ "$code" -eq 2 ] || { echo "expected exit 2 from the padded comparison, got $code" >&2; exit 1; }
+          echo "$out" | grep -q "RANK 1: run-packed"

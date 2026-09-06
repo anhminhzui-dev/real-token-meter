@@ -1,0 +1,6 @@
+{"synthetic": true, "run_id": "run-packed", "step": 1, "batch_size": 8, "seq_len": 512, "pad_tokens": 180, "wall_seconds": 2.0, "gpu_hour_rate_synthetic": 2.0}
+{"synthetic": true, "run_id": "run-packed", "step": 2, "batch_size": 8, "seq_len": 512, "pad_tokens": 220, "wall_seconds": 2.0, "gpu_hour_rate_synthetic": 2.0}
+{"synthetic": true, "run_id": "run-packed", "step": 3, "batch_size": 8, "seq_len": 512, "pad_tokens": 150, "wall_seconds": 2.0, "gpu_hour_rate_synthetic": 2.0}
+{"synthetic": true, "run_id": "run-packed", "step": 4, "batch_size": 8, "seq_len": 512, "pad_tokens": 260, "wall_seconds": 2.0, "gpu_hour_rate_synthetic": 2.0}
+{"synthetic": true, "run_id": "run-packed", "step": 5, "batch_size": 8, "seq_len": 512, "pad_tokens": 200, "wall_seconds": 2.0, "gpu_hour_rate_synthetic": 2.0}
+{"synthetic": true, "run_id": "run-packed", "step": 6, "batch_size": 8, "seq_len": 512, "pad_tokens": 190, "wall_seconds": 2.0, "gpu_hour_rate_synthetic": 2.0}

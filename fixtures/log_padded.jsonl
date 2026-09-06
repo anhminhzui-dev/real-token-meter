@@ -1,0 +1,5 @@
+{"synthetic": true, "run_id": "run-padded", "step": 1, "batch_size": 8, "seq_len": 512, "pad_tokens": 3000, "wall_seconds": 0.4, "gpu_hour_rate_synthetic": 2.0}
+{"synthetic": true, "run_id": "run-padded", "step": 2, "batch_size": 8, "seq_len": 512, "pad_tokens": 3000, "wall_seconds": 0.4, "gpu_hour_rate_synthetic": 2.0}
+{"synthetic": true, "run_id": "run-padded", "step": 3, "batch_size": 8, "seq_len": 512, "pad_tokens": 3000, "wall_seconds": 0.4, "gpu_hour_rate_synthetic": 2.0}
+{"synthetic": true, "run_id": "run-padded", "step": 4, "batch_size": 8, "seq_len": 512, "pad_tokens": 3000, "wall_seconds": 0.4, "gpu_hour_rate_synthetic": 2.0}
+{"synthetic": true, "run_id": "run-padded", "step": 5, "batch_size": 8, "seq_len": 512, "pad_tokens": 3000, "wall_seconds": 0.4, "gpu_hour_rate_synthetic": 2.0}
