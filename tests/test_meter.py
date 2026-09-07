@@ -11,7 +11,9 @@ the shipped tree is allowed to mean anything.
 from __future__ import annotations
 
 import json
+import math
 import re
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -108,7 +110,69 @@ def test_seeded_bad_fixture_holds_and_names_exactly_one_code_per_seeded_row():
         assert by_index(report, index).codes == codes, index
     assert report.run_codes == ()
     assert report.code_counts == {code: 1 for codes in EXPECTED_BAD.values() for code in codes}
-    assert len(CODES) == 8 and set(report.code_counts) <= set(CODES)
+    assert len(CODES) == 9 and set(report.code_counts) <= set(CODES)
+
+
+@pytest.mark.parametrize("wall_seconds", [float("nan"), float("inf"), float("-inf"), 0, -3.0])
+def test_untrusted_wall_seconds_is_refused_not_admitted_as_a_go(tmp_path, wall_seconds):
+    path = write_log(tmp_path, "bad_wall.jsonl", [row(n, wall=wall_seconds) for n in range(1, 5)])
+    report = meter_run(path, policy())
+    assert all(step.codes == ("NEGATIVE_OR_ZERO_TIME",) for step in report.steps)
+    assert report.steps_counted == 0 and report.verdict == "HOLD"
+    assert report.cost_per_million_real is None, "a NaN/inf wall time must never reach cost"
+
+
+@pytest.mark.parametrize("rate", [-1, -0.01, float("nan"), float("inf"), float("-inf")])
+def test_untrusted_rate_is_refused_not_admitted_as_a_go(tmp_path, rate):
+    path = write_log(tmp_path, "bad_rate.jsonl",
+                      [row(n, gpu_hour_rate_synthetic=rate) for n in range(1, 5)])
+    report = meter_run(path, policy())
+    assert all(step.codes == ("BAD_RATE",) for step in report.steps)
+    assert report.steps_counted == 0 and report.verdict == "HOLD"
+    assert report.cost_per_million_real is None, "a negative/NaN/inf rate must never reach cost"
+
+
+def test_non_numeric_string_wall_seconds_is_a_missing_field_not_a_crash(tmp_path):
+    path = write_log(tmp_path, "string_wall.jsonl",
+                      [row(n, wall="not-a-number") for n in range(1, 5)])
+    report = meter_run(path, policy())
+    assert all(step.codes == ("MISSING_FIELD",) for step in report.steps)
+    assert report.verdict == "HOLD"
+
+
+def test_infinite_token_count_is_a_missing_field_not_an_uncaught_overflow(tmp_path):
+    path = write_log(tmp_path, "inf_batch.jsonl",
+                      [row(n, batch_size=float("inf")) for n in range(1, 5)])
+    report = meter_run(path, policy())
+    assert all(step.codes == ("MISSING_FIELD",) for step in report.steps)
+    assert report.verdict == "HOLD"
+
+
+def test_falsifier_untrusted_cost_guards_disabled_let_nan_and_negative_cost_through():
+    """A guard that has never been shown to miss something certifies nothing: switch the two
+    cost-input guards off through the checks= seam and prove the meter then admits a NaN wall
+    time and a negative rate as GO, with the corrupted numbers printed rather than refused."""
+    guarded_checks = tuple(c for c in DEFAULT_CHECKS if c not in ("negative_or_zero_time", "bad_rate"))
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        nan_wall_path = write_log(tmp, "nan_wall.jsonl",
+                                   [row(n, wall=float("nan")) for n in range(1, 5)])
+        neg_rate_path = write_log(tmp, "neg_rate.jsonl",
+                                   [row(n, gpu_hour_rate_synthetic=-1) for n in range(1, 5)])
+
+        guarded_nan = meter_run(nan_wall_path, policy())
+        assert guarded_nan.verdict == "HOLD" and guarded_nan.steps_counted == 0
+
+        unguarded_nan = meter_run(nan_wall_path, policy(), guarded_checks)
+        assert unguarded_nan.verdict == "GO" and unguarded_nan.steps_counted == 4
+        assert math.isnan(unguarded_nan.cost_per_million_real)
+
+        guarded_rate = meter_run(neg_rate_path, policy())
+        assert guarded_rate.verdict == "HOLD" and guarded_rate.steps_counted == 0
+
+        unguarded_rate = meter_run(neg_rate_path, policy(), guarded_checks)
+        assert unguarded_rate.verdict == "GO" and unguarded_rate.steps_counted == 4
+        assert unguarded_rate.cost_per_million_real < 0
 
 
 def test_falsifier_padding_check_disabled_lets_the_inflated_run_win_the_compare():

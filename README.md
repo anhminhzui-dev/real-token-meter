@@ -57,6 +57,12 @@ CHEAPEST: run-padded, 1.41x cheaper per million real tokens than run-packed, ove
 VERDICT: GO
 ```
 
+Both numbers above are an illustrative computation over the five and six rows in `fixtures/`,
+which are invented for this repository — not a measured efficiency win for any real training
+run. What the comparison demonstrates is the mechanism: the same fixture bytes flip from HOLD to
+a false GO the moment the padding guard is switched off, which is why that switch is a test and
+not a claim.
+
 A guard that has never been shown to miss something certifies nothing, so that failure is a
 test rather than a paragraph.
 
@@ -65,10 +71,11 @@ test rather than a paragraph.
 | Code | What triggers it |
 |---|---|
 | `MALFORMED_ROW` | the line is not a JSON object — a truncated writer, not a slow step |
-| `MISSING_FIELD` | a field the policy requires is absent, or its value is not a number |
+| `MISSING_FIELD` | a field the policy requires is absent, its value is not a number, or a token count is a non-finite number (`Infinity`, `-Infinity`) that overflows an integer cast |
 | `DUPLICATE_STEP` | the same step number appears twice in one run |
-| `NEGATIVE_OR_ZERO_TIME` | `wall_seconds` is zero or negative — a divide-by-zero dressed as speed |
-| `BAD_TOKEN_COUNTS` | padding is negative, or is at least the step's whole token count |
+| `NEGATIVE_OR_ZERO_TIME` | `wall_seconds` is zero, negative, `NaN`, or infinite — a divide-by-zero, or a division by nonsense, dressed as speed |
+| `BAD_RATE` | `gpu_hour_rate_synthetic` is negative, `NaN`, or infinite — an untrusted rate is never allowed into the cost arithmetic |
+| `BAD_TOKEN_COUNTS` | `batch_size` or `seq_len` is zero or negative, padding is negative, or padding is at least the step's whole token count |
 | `PADDING_INFLATED` | the step's padding ratio is over the policy's per-step budget |
 
 Two run-level codes sit above those. `TOO_FEW_STEPS` refuses a run too short to mean anything,
@@ -88,15 +95,22 @@ runs over the same inputs write identical bytes.
 
 ```
 $ python -m pytest -q
-.............                                                            [100%]
-13 passed in 0.12s
+..........................                                               [100%]
+26 passed in 0.17s
 ```
 
-13 of 13: one per refusal code, one proving the run-level padding budget fires on a run whose
-every individual step is under the step budget, one per halt condition, the falsifier above, a
-test that walks the whole rendered report and fails on any token count printed without its
-denominator, and a public-clean scan that plants five forbidden shapes and requires each to
-fire before a clean tree is allowed to count for anything.
+26 of 26: one per refusal code, one proving the run-level padding budget fires on a run whose
+every individual step is under the step budget, one per halt condition, the padding falsifier
+above, a test that walks the whole rendered report and fails on any token count printed without
+its denominator, a public-clean scan that plants five forbidden shapes and requires each to fire
+before a clean tree is allowed to count for anything, ten parametrized cases — `NaN`, `+inf`,
+`-inf`, zero and negative wall time; negative, `NaN` and `+inf`/`-inf` rates — proving an
+untrusted cost input is refused rather than admitted as a `GO`, one proving a non-numeric string
+in a numeric field is a named `MISSING_FIELD` rather than a crash, one proving an infinite token
+count is the same named refusal rather than an uncaught `OverflowError`, and a second falsifier
+that switches the two cost-input guards off and proves the meter then hands back a `GO` with a
+`NaN` cost and a `GO` with a negative cost — the exact two admissions a review of this repository
+found before this guard existed.
 
 ## What this is not
 

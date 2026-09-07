@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Sequence
@@ -23,12 +24,15 @@ PER_MILLION = 1_000_000.0
 REQUIRED_POLICY_FIELDS = ("policy_id", "max_step_padding_ratio", "max_run_padding_ratio",
                           "min_steps", "required_fields")
 STEP_CODES = ("MALFORMED_ROW", "MISSING_FIELD", "DUPLICATE_STEP", "NEGATIVE_OR_ZERO_TIME",
-              "BAD_TOKEN_COUNTS", "PADDING_INFLATED")
+              "BAD_RATE", "BAD_TOKEN_COUNTS", "PADDING_INFLATED")
 RUN_CODES = ("TOO_FEW_STEPS", "RUN_PADDING_OVER_BUDGET")
 CODES = STEP_CODES + RUN_CODES
 # The switchable guards. "padding" owns both padding rules: the per-step budget, and the run
 # budget that a fleet of just-under-budget steps would otherwise slip past together.
-DEFAULT_CHECKS = ("missing_field", "duplicate_step", "negative_or_zero_time",
+# "negative_or_zero_time" and "bad_rate" both reject non-finite values (NaN, +/-inf) as well as
+# out-of-range ones: an untrusted cost input that merely parses as a float is not yet a number
+# this tool will divide or multiply by.
+DEFAULT_CHECKS = ("missing_field", "duplicate_step", "negative_or_zero_time", "bad_rate",
                   "bad_token_counts", "padding")
 # The only phrases allowed to stand next to a printed token count. A test enforces it.
 DENOMINATOR_PHRASES = ("steps counted", "step counted", "not counted in the run")
@@ -129,17 +133,27 @@ def check_row(index: int, line: str, policy: Policy, seen: set[str], checks: Seq
         if [name for name in policy.required_fields if name not in row]:
             return Step(index, step_id, run_id, codes=("MISSING_FIELD",))
     try:
-        total = int(row["batch_size"]) * int(row["seq_len"])
+        batch_size, seq_len = int(row["batch_size"]), int(row["seq_len"])
         pad, wall = int(row["pad_tokens"]), float(row["wall_seconds"])
         rate = float(row["gpu_hour_rate_synthetic"])
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, OverflowError):
+        # OverflowError: int() on a JSON Infinity token — a non-finite token count is exactly
+        # as untrusted as an absent one.
         return Step(index, step_id, run_id, codes=("MISSING_FIELD",))
+    total = batch_size * seq_len
     codes: list[str] = []
     if "duplicate_step" in checks and step_id in seen:
         codes.append("DUPLICATE_STEP")
-    if "negative_or_zero_time" in checks and wall <= 0:
+    # Untrusted cost inputs: a wall time or rate that is zero, negative, NaN or infinite must
+    # never reach the cost arithmetic below. NaN and inf both fail every `<= 0` / `< 0` bound
+    # check silently (NaN compares False to everything; inf compares True to everything), so
+    # isfinite() is required in addition to the sign check, not instead of it.
+    if "negative_or_zero_time" in checks and not (math.isfinite(wall) and wall > 0):
         codes.append("NEGATIVE_OR_ZERO_TIME")
-    if "bad_token_counts" in checks and (total <= 0 or pad < 0 or pad >= total):
+    if "bad_rate" in checks and not (math.isfinite(rate) and rate >= 0):
+        codes.append("BAD_RATE")
+    if ("bad_token_counts" in checks
+            and (batch_size <= 0 or seq_len <= 0 or pad < 0 or pad >= total)):
         codes.append("BAD_TOKEN_COUNTS")
     elif "padding" in checks and total > 0 and pad / total > policy.max_step_padding_ratio:
         codes.append("PADDING_INFLATED")
