@@ -1,37 +1,26 @@
 # real-token-meter
 
-Reports training throughput and cost per real token, padding excluded, with a fail-closed refusal on any figure it cannot trust.
+[![CI](https://github.com/anhminhzui-dev/real-token-meter/actions/workflows/ci.yml/badge.svg)](https://github.com/anhminhzui-dev/real-token-meter/actions/workflows/ci.yml)
+[![Licence](https://img.shields.io/badge/licence-evaluation--only-blue)](LICENSE)
 
-[![CI](https://github.com/anhminhzui-dev/real-token-meter/actions/workflows/ci.yml/badge.svg)](https://github.com/anhminhzui-dev/real-token-meter/actions/workflows/ci.yml) [![Licence: evaluation-only](https://img.shields.io/badge/licence-evaluation--only-lightgrey)](LICENSE)
+**Count non-padding tokens before comparing training throughput or cost.**
 
-## Why this exists
+This offline meter computes throughput and synthetic cost over real tokens, refuses untrustworthy steps, and names the denominator of every aggregate. Here, real tokens means `batch_size * seq_len - pad_tokens`; it does not measure learning progress or useful gradient updates.
 
-> "Demonstrated expertise with Python, including deep familiarity with machine learning frameworks such as scikit-learn, TensorFlow, or PyTorch" — micro1, Machine Learning Engineer (Contractor), first requirement of the posting at himalayas.app/companies/micro1/jobs/machine-learning-engineer-7037967333
-
-Built for this posting, in a day, to show the shape of what I would do on day one.
-
-## To the micro1 reviewer
-
-Frameworks are the easy half. The half that decides whether a training budget was spent well
-is the arithmetic underneath them, and the most common way that arithmetic lies is padding.
-This tool reads a per-step training log and reports throughput and cost over **real** tokens,
-refuses the steps whose numbers cannot be trusted, and prints every figure next to the
-denominator it was computed over. Standard library only, Python 3.10 or newer, nothing to
-install except `pytest`. The one command a reviewer runs:
-
-```
-$ PYTHONPATH=src python -m real_token_meter.cli meter --policy fixtures/policy.json --log fixtures/log_bad.jsonl
+```text
+step log + policy → validate counts, time and rate → per-step + run-level checks
+                  → counted-token totals → denominator-bound report
 ```
 
-It exits 2 and names six refusals. The clean fixture exits 0. Everything under `fixtures/` is
-invented for this repository, and the rate is a made-up number: the log field is called
-`gpu_hour_rate_synthetic` so it cannot be mistaken for a price anyone charges.
+Both padding budgets matter: individually acceptable steps can still exceed the aggregate run budget. Refused rows remain visible but never enter the reported totals. Deterministic summaries bind the input hashes and omit timestamps and local paths.
+
+The comparison below uses invented logs and explicitly synthetic hourly rates. There is no trainer, hardware or provider integration, and no real efficiency gain is claimed.
 
 ## Why raw tokens per second misleads
 
 Raw throughput is `batch_size * seq_len / wall_seconds`. It counts padding as work. A run that
 pads every sequence out to a fixed length and a run that packs sequences to length can post the
-same raw figure while one of them is buying far less learning per unit of spend. So the
+same raw figure while processing different quantities of non-padding tokens. This arithmetic alone cannot establish which run learns more. So the
 numerator here is `batch_size * seq_len - pad_tokens` — that is what **real** means in this
 repository — and the headline figure is cost per million real tokens.
 
@@ -66,7 +55,7 @@ VERDICT: GO
 Both numbers above are an illustrative computation over the five and six rows in `fixtures/`,
 which are invented for this repository — not a measured efficiency win for any real training
 run. What the comparison demonstrates is the mechanism: the same fixture bytes flip from HOLD to
-a false GO the moment the padding guard is switched off, which is why that switch is a test and
+a policy-violating GO the moment the padding guard is switched off, which is why that switch is a test and
 not a claim.
 
 A guard that has never been shown to miss something certifies nothing, so that failure is a
@@ -118,17 +107,13 @@ that switches the two cost-input guards off and proves the meter then hands back
 `NaN` cost and a `GO` with a negative cost — the exact two admissions a review of this repository
 found before this guard existed.
 
-## Boundaries
+## Scope and integration
 
-Built for one posting, in a day: this is a design sample, not maintained software. **No accuracy is claimed here and none is computable from what ships here.** Nothing in this
-repository measures a real training run, a real model or a real machine: every log row is a synthetic fixture invented for this repository, no hardware is named
-and no price is real. There is no network code path — a test greps `src/` for the
-network-capable imports and fails on a hit — and no model is loaded, so the arithmetic is
-deterministic by construction rather than by promise. Every threshold is a design constant of
-this project, not a validated operating point: the step budget of 0.35, the run budget of 0.20
-and the minimum of 4 steps are policy inputs a team sets from its own data, not findings.
+Synthetic logs make the accounting reproducible: padded tokens, non-padding tokens, elapsed time and configured rates are kept distinct. Displayed costs are fixture arithmetic, not measurements of named hardware or a real training run.
 
-## What I would do on day one at micro1
+Budget thresholds and minimum-step requirements are policy inputs. Connect representative logs and actual rates before using the output for a purchase decision. Non-padding throughput measures work volume, not learning quality. The tool runs offline without loading a model.
+
+## Integration path
 
 Ask for one week of real training logs and the cost number the team is judged on. Then wire
 this in as the step the training loop cannot skip: real tokens per second and cost per million
@@ -138,7 +123,10 @@ per million real tokens by data source, by sequence-length bucket, by model size
 the denominator is honest, every downstream comparison is worth making. What I would not ship
 is a dashboard whose numbers have never been shown to be wrong.
 
+## Project context
+
+Problem definition, architecture and acceptance review: **Minh Vo**, with AI-assisted implementation. This focused tool belongs to a broader body of data, assessment and training-systems work described in the [research overview](https://github.com/anhminhzui-dev#research-engineering-the-evidence-behind-ai-judgement). Its runnable scope is the mechanism documented here.
+
 ## Licence
 
 Source-available, evaluation-only — read it, run it, quote it in a review; see `LICENSE`.
-
