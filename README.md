@@ -1,5 +1,11 @@
 # real-token-meter
 
+Reports training throughput and cost per real token, padding excluded, with a fail-closed refusal on any figure it cannot trust.
+
+[![CI](https://github.com/anhminhzui-dev/real-token-meter/actions/workflows/ci.yml/badge.svg)](https://github.com/anhminhzui-dev/real-token-meter/actions/workflows/ci.yml) [![Licence: evaluation-only](https://img.shields.io/badge/licence-evaluation--only-lightgrey)](LICENSE)
+
+## Why this exists
+
 > "Demonstrated expertise with Python, including deep familiarity with machine learning frameworks such as scikit-learn, TensorFlow, or PyTorch" — micro1, Machine Learning Engineer (Contractor), first requirement of the posting at himalayas.app/companies/micro1/jobs/machine-learning-engineer-7037967333
 
 Built for this posting, in a day, to show the shape of what I would do on day one.
@@ -91,12 +97,12 @@ whose every metric key states its own denominator (`real_tokens_over_counted_ste
 `cost_per_million_real_tokens_synthetic_rate`); it carries no timestamp and no path, so two
 runs over the same inputs write identical bytes.
 
-## Tests
+## Try it in 60 seconds
 
 ```
 $ python -m pytest -q
 ..........................                                               [100%]
-26 passed in 0.17s
+26 passed in 0.16s        # run 2026-09-07
 ```
 
 26 of 26: one per refusal code, one proving the run-level padding budget fires on a run whose
@@ -112,10 +118,10 @@ that switches the two cost-input guards off and proves the meter then hands back
 `NaN` cost and a `GO` with a negative cost — the exact two admissions a review of this repository
 found before this guard existed.
 
-## What this is not
+## Boundaries
 
-**No accuracy is claimed here and none is computable from what ships here.** Nothing in this
-repository measures a real training run, a real model or a real machine: no hardware is named
+Built for one posting, in a day: this is a design sample, not maintained software. **No accuracy is claimed here and none is computable from what ships here.** Nothing in this
+repository measures a real training run, a real model or a real machine: every log row is a synthetic fixture invented for this repository, no hardware is named
 and no price is real. There is no network code path — a test greps `src/` for the
 network-capable imports and fails on a hit — and no model is loaded, so the arithmetic is
 deterministic by construction rather than by promise. Every threshold is a design constant of
